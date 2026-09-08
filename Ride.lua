@@ -15,10 +15,7 @@ local MOUNTED_BUFF = 252
 local COOLDOWN = 60
 local CONFIRM_WINDOW = 10  -- stop waiting for the buff after this many seconds
 
--- The server announces owned mounts in packet 0x0AE, sent on zone. Its whole
--- payload is a little-endian bitmask where bit N means mount id N is unlocked.
--- Key items 3072+ carry the same thing on retail, but HasKeyItem reads nothing
--- on a modified client, so the packet is the only source that works everywhere.
+-- 0x0AE (sent on zone): payload is a LE bitmask, bit N = mount id N unlocked.
 local MOUNT_LIST_PACKET = 0x0AE
 local MASK_OFFSET = 4  -- e.data includes the 4-byte packet header
 local MASK_BYTES = 8   -- 64 mount ids
@@ -65,17 +62,12 @@ ashita.events.register('packet_in', 'packet_in_cb', function (e)
 
     local names = {}
     for _, id in ipairs(mount_ids(e.data)) do
-        -- Names come from the client's own resource table, so custom server mounts
-        -- (CatsEyeXI's Gyokko is id 50) resolve without hardcoding a list.
-        -- Skip ids the client cannot name; /mount needs a name, not an id.
+        -- resource table, so custom server mounts (Gyokko = 50) need no hardcoded list
         local name = AshitaCore:GetResourceManager():GetString('mounts.names', id)
         if name and name ~= '' then names[#names + 1] = name end
     end
-    -- ponytail: concat compare keeps the usual zone from writing the file again
-    if table.concat(names, ',') ~= table.concat(config.mounts, ',') then
-        config.mounts = T(names)
-        settings.save()
-    end
+    config.mounts = T(names)
+    settings.save()
 end)
 
 -- Only a confirmed buff starts the lockout, so a /mount the game refuses costs nothing.
