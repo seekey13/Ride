@@ -25,11 +25,10 @@ local pending    = 0  -- os.time() of a /mount we issued but have not confirmed
 -- ponytail: buff array is fixed at 32 slots; 255/0 are empty markers
 local function is_mounted()
     local player = AshitaCore:GetMemoryManager():GetPlayer()
-    if player == nil then return false end
-    local BUFFS = player:GetBuffs()
-    if BUFFS == nil then return false end
+    local buffs = player and player:GetBuffs()
+    if not buffs then return false end
     for i = 1, 32 do
-        if BUFFS[i] == MOUNTED_BUFF then return true end
+        if buffs[i] == MOUNTED_BUFF then return true end
     end
     return false
 end
@@ -73,7 +72,8 @@ ashita.events.register('command', 'command_cb', function (e)
     end
 
     pending = os.time()
-    AshitaCore:GetChatManager():QueueCommand(1, '/mount ' .. config.mount)
+    -- ponytail: %q quotes unconditionally; harmless on single-word names
+    AshitaCore:GetChatManager():QueueCommand(1, ('/mount %q'):format(config.mount))
 end)
 
 ashita.events.register('load', 'load_cb', function ()
