@@ -2,7 +2,7 @@
 
 addon.name    = 'Ride'
 addon.author  = 'Seekey'
-addon.version = '1.0'
+addon.version = '1.1'
 addon.desc    = 'Toggle your mount with /ride'
 addon.link    = 'https://github.com/seekey13/Ride'
 
@@ -13,6 +13,17 @@ local settings = require('settings')
 local MOUNTED_BUFF = 252
 local COOLDOWN = 60
 local CONFIRM_WINDOW = 10  -- stop waiting for the buff after this many seconds
+
+-- Mount key items run contiguously from 3072, so list index N is key item 3071 + N.
+local KEYITEM_BASE = 3072
+local MOUNTS = {
+    'Chocobo', 'Raptor', 'Tiger', 'Crab', 'Red crab', 'Bomb',
+    'Sheep', 'Morbol', 'Crawler', 'Fenrir', 'Beetle', 'Moogle',
+    'Magic pot', 'Tulfaire', 'Warmachine', 'Xzomit', 'Hippogryph', 'Spectral chair',
+    'Spheroid', 'Omega', 'Coeurl', 'Goobbue', 'Raaz', 'Levitus',
+    'Adamantoise', 'Dhalmel', 'Doll', 'Golden Bomb', 'Buffalo', 'Wivre',
+    'Red Raptor', 'Iron Giant', 'Byakko', 'Noble Chocobo', 'Ixion', 'Phuabo',
+}
 
 local config = settings.load(T{ mount = 'Raptor' })
 settings.register('settings', 'settings_update', function (s)
@@ -31,6 +42,21 @@ local function is_mounted()
         if buffs[i] == MOUNTED_BUFF then return true end
     end
     return false
+end
+
+-- Returns a mount this character has unlocked, or nil if they own none.
+-- ponytail: rebuilt per call; 36 key item reads is nothing next to a frame
+local function random_mount()
+    local player = AshitaCore:GetMemoryManager():GetPlayer()
+    if not player then return nil end
+    local owned = {}
+    for i, name in ipairs(MOUNTS) do
+        if player:HasKeyItem(KEYITEM_BASE + i - 1) then
+            owned[#owned + 1] = name
+        end
+    end
+    if #owned == 0 then return nil end
+    return owned[math.random(#owned)]
 end
 
 -- Only a confirmed buff starts the lockout, so a /mount the game refuses costs nothing.
@@ -71,11 +97,22 @@ ashita.events.register('command', 'command_cb', function (e)
         return
     end
 
+    -- 'Random' is a sentinel, not a mount name: reroll on every /ride.
+    local mount = config.mount
+    if mount:lower() == 'random' then
+        mount = random_mount()
+        if mount == nil then
+            print(chat.header(addon.name):append(chat.message('No mounts unlocked on this character.')))
+            return
+        end
+    end
+
     pending = os.time()
     -- ponytail: %q quotes unconditionally; harmless on single-word names
-    AshitaCore:GetChatManager():QueueCommand(1, ('/mount %q'):format(config.mount))
+    AshitaCore:GetChatManager():QueueCommand(1, ('/mount %q'):format(mount))
 end)
 
 ashita.events.register('load', 'load_cb', function ()
+    math.randomseed(os.time())
     print(chat.header(addon.name):append(chat.message('Loaded. /ride toggles ' .. config.mount)))
 end)
