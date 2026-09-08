@@ -12,7 +12,7 @@ Drop `Ride.lua` in `Ashita/addons/Ride/`, then `/addon load Ride`.
 | --- | --- |
 | `/ride` | Mounted? `/dismount`. Not mounted? `/mount <your mount>`. |
 | `/ride <name>` | Set the mount to use. Saved between sessions. |
-| `/ride Random` | Roll a different unlocked mount every `/ride`. |
+| `/ride Random` | Pick a random unlocked mount each `/ride`. |
 | `/ride list` | Show the mounts this character has unlocked. |
 
 Default mount is `Random`. `Random` is a sentinel, not a mount name - it picks fresh each time from the mounts this character has unlocked.
