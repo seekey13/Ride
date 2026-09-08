@@ -17,5 +17,5 @@ Default mount is `Raptor`.
 
 ## Notes
 
-- 60 second lockout after mounting. Dismounting is never blocked.
+- 60 second lockout, started only once the mount buff is confirmed. A `/mount` the game refuses (town, dungeon, combat, bad mount name) costs you nothing. Dismounting is never blocked.
 - Mount status is read from your buffs each time, so the 30 minute buff expiry needs no handling.

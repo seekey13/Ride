@@ -12,13 +12,15 @@ local settings = require('settings')
 
 local MOUNTED_BUFF = 252
 local COOLDOWN = 60
+local CONFIRM_WINDOW = 10  -- stop waiting for the buff after this many seconds
 
 local config = settings.load(T{ mount = 'Raptor' })
 settings.register('settings', 'settings_update', function (s)
     if s ~= nil then config = s end
 end)
 
-local last_mount = 0  -- os.time() of the last /mount we issued
+local last_mount = 0  -- os.time() the mount buff was confirmed after our /mount
+local pending    = 0  -- os.time() of a /mount we issued but have not confirmed
 
 -- ponytail: buff array is fixed at 32 slots; 255/0 are empty markers
 local function is_mounted()
@@ -31,6 +33,18 @@ local function is_mounted()
     end
     return false
 end
+
+-- Only a confirmed buff starts the lockout, so a /mount the game refuses costs nothing.
+-- ponytail: runs per frame but only does work while a mount is pending
+ashita.events.register('d3d_present', 'present_cb', function ()
+    if pending == 0 then return end
+    if is_mounted() then
+        last_mount = os.time()
+        pending = 0
+    elseif os.time() - pending > CONFIRM_WINDOW then
+        pending = 0  -- mount never landed; no lockout
+    end
+end)
 
 ashita.events.register('command', 'command_cb', function (e)
     local args = e.command:args()
@@ -49,6 +63,8 @@ ashita.events.register('command', 'command_cb', function (e)
         return
     end
 
+    if pending ~= 0 then return end  -- a /mount is already in flight
+
     -- ponytail: os.time() not os.clock() -- clock is CPU time, not wall seconds
     local remaining = COOLDOWN - (os.time() - last_mount)
     if remaining > 0 then
@@ -56,7 +72,7 @@ ashita.events.register('command', 'command_cb', function (e)
         return
     end
 
-    last_mount = os.time()
+    pending = os.time()
     AshitaCore:GetChatManager():QueueCommand(1, '/mount ' .. config.mount)
 end)
 
