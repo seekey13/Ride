@@ -22,8 +22,9 @@ local CONFIRM_WINDOW = 10  -- stop waiting for the buff after this many seconds
 local MOUNT_LIST_PACKET = 0x0AE
 local MASK_OFFSET = 4  -- e.data includes the 4-byte packet header
 local MASK_BYTES = 8   -- 64 mount ids
+local NO_LIST = 'No mount list yet -- zone once so the server sends it.'
 
-local config = settings.load(T{ mount = 'Raptor' })
+local config = settings.load(T{ mount = 'Random' })
 settings.register('settings', 'settings_update', function (s)
     if s ~= nil then config = s end
 end)
@@ -43,30 +44,32 @@ local function is_mounted()
     return false
 end
 
--- Names come from the client's own resource table, so custom server mounts
--- (CatsEyeXI's Gyokko is id 50) resolve without hardcoding a list.
-local function mount_name(id)
-    local ok, name = pcall(function()
-        return AshitaCore:GetResourceManager():GetString('mounts.names', id)
-    end)
-    if not ok or name == nil or name == '' then return nil end
-    return name
+local function mount_ids(data)
+    local ids = {}
+    for id = 0, MASK_BYTES * 8 - 1 do
+        local value = data:byte(MASK_OFFSET + math.floor(id / 8) + 1)
+        if bit.band(value, bit.lshift(1, id % 8)) ~= 0 then ids[#ids + 1] = id end
+    end
+    return ids
+end
+
+-- ponytail: self-check at load; payload with bit 0 and bit 9 set means ids 0 and 9.
+do
+    local ids = mount_ids(('\0'):rep(MASK_OFFSET) .. '\1\2' .. ('\0'):rep(MASK_BYTES - 2))
+    assert(#ids == 2 and ids[1] == 0 and ids[2] == 9, 'mount_ids: bitmask parse broken')
 end
 
 ashita.events.register('packet_in', 'packet_in_cb', function (e)
     if e.id ~= MOUNT_LIST_PACKET then return end
-    if e.data == nil or #e.data < MASK_OFFSET + MASK_BYTES then return end
+    if #e.data < MASK_OFFSET + MASK_BYTES then return end
 
     local names = {}
-    for byte_index = 0, MASK_BYTES - 1 do
-        local value = e.data:byte(MASK_OFFSET + byte_index + 1)
-        for bit_index = 0, 7 do
-            if bit.band(value, bit.lshift(1, bit_index)) ~= 0 then
-                -- Skip ids the client cannot name; /mount needs a name, not an id.
-                local name = mount_name(byte_index * 8 + bit_index)
-                if name then names[#names + 1] = name end
-            end
-        end
+    for _, id in ipairs(mount_ids(e.data)) do
+        -- Names come from the client's own resource table, so custom server mounts
+        -- (CatsEyeXI's Gyokko is id 50) resolve without hardcoding a list.
+        -- Skip ids the client cannot name; /mount needs a name, not an id.
+        local name = AshitaCore:GetResourceManager():GetString('mounts.names', id)
+        if name and name ~= '' then names[#names + 1] = name end
     end
     owned = names
 end)
@@ -91,10 +94,8 @@ ashita.events.register('command', 'command_cb', function (e)
     if #args > 1 then
         local arg = table.concat(args, ' ', 2)
         if arg:lower() == 'list' then
-            print(chat.header(addon.name):append(chat.message(#owned > 0
-                and table.concat(owned, ', ')
-                or 'None yet -- zone once so the server sends the mount list.')))
-            return
+            local msg = #owned > 0 and table.concat(owned, ', ') or NO_LIST
+            return print(chat.header(addon.name):append(chat.message(msg)))
         end
         config.mount = arg
         settings.save()
@@ -119,11 +120,7 @@ ashita.events.register('command', 'command_cb', function (e)
     -- 'Random' is a sentinel, not a mount name: reroll on every /ride.
     local mount = config.mount
     if mount:lower() == 'random' then
-        if #owned == 0 then
-            print(chat.header(addon.name):append(chat.message(
-                'No mount list yet -- zone once so the server sends it.')))
-            return
-        end
+        if #owned == 0 then return print(chat.header(addon.name):append(chat.message(NO_LIST))) end
         mount = owned[math.random(#owned)]
     end
 

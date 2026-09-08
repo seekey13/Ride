@@ -15,7 +15,7 @@ Drop `Ride.lua` in `Ashita/addons/Ride/`, then `/addon load Ride`.
 | `/ride Random` | Roll a different unlocked mount every `/ride`. |
 | `/ride list` | Show the mounts this character has unlocked. |
 
-Default mount is `Raptor`. `Random` is a sentinel, not a mount name - it picks fresh each time from the mounts this character has unlocked.
+Default mount is `Random`. `Random` is a sentinel, not a mount name - it picks fresh each time from the mounts this character has unlocked.
 
 ## Notes
 
