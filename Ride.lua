@@ -15,23 +15,20 @@ local MOUNTED_BUFF = 252
 local COOLDOWN = 60
 local CONFIRM_WINDOW = 10  -- stop waiting for the buff after this many seconds
 
--- The server announces owned mounts in packet 0x0AE, sent on zone. Its whole
--- payload is a little-endian bitmask where bit N means mount id N is unlocked.
--- Key items 3072+ carry the same thing on retail, but HasKeyItem reads nothing
--- on a modified client, so the packet is the only source that works everywhere.
+-- 0x0AE (sent on zone): payload is a LE bitmask, bit N = mount id N unlocked.
 local MOUNT_LIST_PACKET = 0x0AE
 local MASK_OFFSET = 4  -- e.data includes the 4-byte packet header
 local MASK_BYTES = 8   -- 64 mount ids
 local NO_LIST = 'No mount list yet -- zone once so the server sends it.'
 
-local config = settings.load(T{ mount = 'Random' })
+-- The list is saved so it survives a reload; only a zone can refresh it.
+local config = settings.load(T{ mount = 'Random', mounts = T{} })
 settings.register('settings', 'settings_update', function (s)
     if s ~= nil then config = s end
 end)
 
 local last_mount = 0  -- os.time() the mount buff was confirmed after our /mount
 local pending    = 0  -- os.time() of a /mount we issued but have not confirmed
-local owned      = {} -- mount names from the last 0x0AE; empty until we zone
 
 -- ponytail: buff array is fixed at 32 slots; 255/0 are empty markers
 local function is_mounted()
@@ -65,13 +62,12 @@ ashita.events.register('packet_in', 'packet_in_cb', function (e)
 
     local names = {}
     for _, id in ipairs(mount_ids(e.data)) do
-        -- Names come from the client's own resource table, so custom server mounts
-        -- (CatsEyeXI's Gyokko is id 50) resolve without hardcoding a list.
-        -- Skip ids the client cannot name; /mount needs a name, not an id.
+        -- resource table, so custom server mounts (Gyokko = 50) need no hardcoded list
         local name = AshitaCore:GetResourceManager():GetString('mounts.names', id)
         if name and name ~= '' then names[#names + 1] = name end
     end
-    owned = names
+    config.mounts = T(names)
+    settings.save()
 end)
 
 -- Only a confirmed buff starts the lockout, so a /mount the game refuses costs nothing.
@@ -94,7 +90,7 @@ ashita.events.register('command', 'command_cb', function (e)
     if #args > 1 then
         local arg = table.concat(args, ' ', 2)
         if arg:lower() == 'list' then
-            local msg = #owned > 0 and table.concat(owned, ', ') or NO_LIST
+            local msg = #config.mounts > 0 and table.concat(config.mounts, ', ') or NO_LIST
             return print(chat.header(addon.name):append(chat.message(msg)))
         end
         config.mount = arg
@@ -120,8 +116,8 @@ ashita.events.register('command', 'command_cb', function (e)
     -- 'Random' is a sentinel, not a mount name: reroll on every /ride.
     local mount = config.mount
     if mount:lower() == 'random' then
-        if #owned == 0 then return print(chat.header(addon.name):append(chat.message(NO_LIST))) end
-        mount = owned[math.random(#owned)]
+        if #config.mounts == 0 then return print(chat.header(addon.name):append(chat.message(NO_LIST))) end
+        mount = config.mounts[math.random(#config.mounts)]
     end
 
     pending = os.time()
